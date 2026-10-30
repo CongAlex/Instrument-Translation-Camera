@@ -9,6 +9,14 @@ from flask import Flask, request, send_from_directory
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+from calibration import (
+    FINGERTIPS,
+    build_calibration,
+    draw_calibration,
+    load_calibration,
+    region_at,
+    save_calibration,
+)
 from paper_detector import detect_paper
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,6 +30,18 @@ latest_mask = None
 frame_lock = threading.Lock()
 landmarker_lock = threading.Lock()
 last_timestamp_ms = 0
+
+CALIBRATION_DIR = BASE_DIR / "calibration"
+SAMPLES_DIR = BASE_DIR / "samples"
+CALIBRATION_FRAMES = 15
+
+calibration = None
+calibration_checked = False
+calibrating = False
+calibration_frames = []
+latest_raw = None
+latest_fingers = {}
+status_text = "Press C to calibrate."
 
 # Initialize MediaPipe Hand Landmarker.
 model_path = str(BASE_DIR / "models" / "hand_landmarker.task")
@@ -94,6 +114,8 @@ def camera_js():
 @app.post("/frame")
 def receive_frame():
     global latest_frame, latest_mask, last_timestamp_ms
+    global calibration, calibration_checked, calibrating, calibration_frames
+    global latest_raw, latest_fingers, status_text
 
     image_bytes = np.frombuffer(request.get_data(), dtype=np.uint8)
     frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
@@ -117,12 +139,53 @@ def receive_frame():
         last_timestamp_ms = timestamp_ms
         result = hand_landmarker.detect_for_video(mp_image, timestamp_ms)
 
-    # Draw detected hand landmarks.
+    with frame_lock:
+        latest_raw = frame
+        if not calibration_checked:
+            calibration = load_calibration(CALIBRATION_DIR, frame.shape)
+            calibration_checked = True
+            if calibration is not None:
+                status_text = (
+                    f"Loaded calibration: {len(calibration['regions'])} regions."
+                )
+        if calibrating:
+            if result.hand_landmarks:
+                calibration_frames.clear()
+                status_text = "Calibrating: keep your hands out of view."
+            else:
+                calibration_frames.append(frame)
+            if len(calibration_frames) >= CALIBRATION_FRAMES:
+                try:
+                    new_cal = build_calibration(calibration_frames)
+                    save_calibration(new_cal, CALIBRATION_DIR)
+                    calibration = new_cal
+                    status_text = f"Calibrated: {len(new_cal['regions'])} regions."
+                except ValueError as error:
+                    status_text = f"Calibration failed: {error} Press C to retry."
+                finally:
+                    calibrating = False
+                    calibration_frames = []
+        cal = calibration if not calibrating else None
+
+    fingers = {}
+    if cal is not None:
+        if result.hand_landmarks:
+            hand = result.hand_landmarks[0]
+            fingers = {
+                name: region_at(cal, hand[i].x, hand[i].y)
+                for name, i in FINGERTIPS.items()
+            }
+        annotated = draw_calibration(
+            annotated, cal, {r for r in fingers.values() if r}
+        )
+
+    # Draw detected hand landmarks on top of the overlay.
     annotated = draw_hand_landmarks(annotated, result)
 
     with frame_lock:
         latest_frame = annotated
         latest_mask = mask
+        latest_fingers = fingers
 
     return "OK", 200
 
@@ -140,7 +203,7 @@ def run_server():
 if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
 
-    print("Waiting for phone camera frames. Press Q to quit.")
+    print("Waiting for phone camera frames. C = calibrate, S = save frame, Q = quit.")
 
     try:
         while True:
@@ -155,16 +218,45 @@ if __name__ == "__main__":
                     if latest_mask is not None
                     else None
                 )
+                status = status_text
+                fingers = dict(latest_fingers)
 
             if frame is None:
                 frame = np.zeros((240, 320, 3), dtype=np.uint8)
+            cv2.putText(
+                frame, status, (5, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
+            )
+            if fingers:
+                cv2.putText(
+                    frame,
+                    "  ".join(f"{name[0]}:{rid or '-'}" for name, rid in fingers.items()),
+                    (5, frame.shape[0] - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
+                )
             cv2.imshow("Phone Camera Feed", frame)
 
             if mask is not None:
                 cv2.imshow("Paper Detection Mask", mask)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            elif key == ord("c"):
+                with frame_lock:
+                    calibrating = True
+                    calibration_frames = []
+                    status_text = "Calibrating: keep your hands out of view."
+            elif key == ord("s"):
+                with frame_lock:
+                    raw = latest_raw.copy() if latest_raw is not None else None
+                if raw is not None:
+                    SAMPLES_DIR.mkdir(exist_ok=True)
+                    path = SAMPLES_DIR / f"frame_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
+                    cv2.imwrite(str(path), raw)
+                    print(path)
+                    with frame_lock:
+                        status_text = f"Saved {path.name}"
     finally:
         hand_landmarker.close()
         cv2.destroyAllWindows()

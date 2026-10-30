@@ -79,6 +79,15 @@ Keep both the Python server and ngrok running while using the camera.
 - `models/hand_landmarker.task` — MediaPipe hand-tracking model.
 - `requirements.txt` — Python dependencies.
 
+## Calibration
+
+The template is black solid boxes or black outlines on white Letter paper, landscape.
+
+- Press `C` with your hands out of view; regions are numbered left to right.
+- Press `S` to save the current frame to `samples/`.
+- `python calibrate_image.py samples/<file>.jpg` writes a `_debug.png` showing the
+  flattened paper, the ink mask and the numbered regions.
+
 ## Tests
 
 Run the unit tests from the repo root:
