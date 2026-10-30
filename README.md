@@ -88,7 +88,15 @@ python phone_server.py --list-cameras    # find Camo's index
 python phone_server.py --camera 1        # use that index
 ```
 
-The free Camo tier (720p, no watermark) is enough. Without `--camera`, the phone page + ngrok setup above still works.
+The free Camo tier (720p) is enough. Without `--camera`, the phone page + ngrok setup above still works.
+
+Tips:
+- Use the iPhone's **1×** lens, not 0.5× (the ultra-wide is softer, bends the paper's edges, and makes keys tiny).
+- Keep Camo Camera open and the phone unlocked (Auto-Lock → Never while testing); Camo Studio can stay minimised.
+- Run one server at a time, from the project `.venv` (select it as VS Code's interpreter).
+- Webcam frames are shrunk to 640 px wide for speed. The second status line shows `rx` (frames arriving), `proc` (ms to process one) and `age` (ms from arrival to ready).
+- Plug the laptop in and use the **Best performance** power mode: on low battery the CPU throttles and `proc` can jump past 100 ms.
+- Q or Ctrl+C quits cleanly.
 
 ## Calibration
 
