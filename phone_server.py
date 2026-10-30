@@ -58,6 +58,9 @@ pending_lock = threading.Lock()
 pending_event = threading.Event()
 frames_received = 0
 process_ms = 0.0
+pending_time = 0.0
+age_ms = 0.0               # Arrival on the laptop -> processed and ready to show.
+CAMERA_MAX_WIDTH = 640     # Webcam frames are shrunk to this for speed.
 
 # Initialize MediaPipe Hand Landmarker.
 model_path = str(BASE_DIR / "models" / "hand_landmarker.task")
@@ -142,11 +145,12 @@ def receive_frame():
 
 
 def submit_frame(frame):
-    global pending_frame, frames_received
+    global pending_frame, frames_received, pending_time
 
     # A newer frame replaces an unprocessed older one, so the server never falls behind.
     with pending_lock:
         pending_frame = frame
+        pending_time = time.perf_counter()
         frames_received += 1
     pending_event.set()
 
@@ -176,6 +180,11 @@ def camera_loop(index):
     while True:
         ok, frame = cap.read()
         if ok:
+            if frame.shape[1] > CAMERA_MAX_WIDTH:
+                # Camo sends 1280x720; a quarter of the pixels is far cheaper
+                # to process and still plenty for the paper keyboard.
+                scale = CAMERA_MAX_WIDTH / frame.shape[1]
+                frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
             submit_frame(frame)
         else:
             time.sleep(0.05)
@@ -261,10 +270,11 @@ def process_frame(frame):
 
 
 def process_pending():
-    global pending_frame, process_ms
+    global pending_frame, process_ms, age_ms
 
     with pending_lock:
         frame = pending_frame
+        arrived = pending_time
         pending_frame = None
         pending_event.clear()
     if frame is None:
@@ -274,6 +284,7 @@ def process_pending():
     process_frame(frame)
     elapsed_ms = (time.perf_counter() - start) * 1000
     process_ms = 0.9 * process_ms + 0.1 * elapsed_ms
+    age_ms = 0.9 * age_ms + 0.1 * (time.perf_counter() - arrived) * 1000
     return True
 
 
@@ -414,7 +425,7 @@ if __name__ == "__main__":
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
             )
             cv2.putText(
-                frame, f"rx {rx_fps:.1f} fps  proc {process_ms:.0f} ms", (5, 32),
+                frame, f"rx {rx_fps:.1f} fps  proc {process_ms:.0f} ms  age {age_ms:.0f} ms", (5, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
             )
             if fingers:
