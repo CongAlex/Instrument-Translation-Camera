@@ -45,13 +45,28 @@ class ServerTests(unittest.TestCase):
     def test_valid_frame_accepted(self):
         resp = self.client.post("/frame", data=jpeg_bytes())
         self.assertEqual(resp.status_code, 200)
+        self.assertTrue(phone_server.process_pending())
         self.assertIsNotNone(phone_server.latest_frame)
 
     def test_timestamps_strictly_increase(self):
         self.client.post("/frame", data=jpeg_bytes())
+        phone_server.process_pending()
         first = phone_server.last_timestamp_ms
         self.client.post("/frame", data=jpeg_bytes())
+        phone_server.process_pending()
         self.assertGreater(phone_server.last_timestamp_ms, first)
+
+    def test_newer_frame_replaces_pending(self):
+        self.client.post("/frame", data=jpeg_bytes())
+        self.client.post("/frame", data=jpeg_bytes())
+        self.assertTrue(phone_server.process_pending())
+        self.assertFalse(phone_server.process_pending())
+
+    def test_frame_counter(self):
+        before = phone_server.frames_received
+        self.client.post("/frame", data=jpeg_bytes())
+        self.client.post("/frame", data=jpeg_bytes())
+        self.assertEqual(phone_server.frames_received, before + 2)
 
 
 if __name__ == "__main__":

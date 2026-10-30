@@ -11,15 +11,18 @@ const context = canvas.getContext("2d");
 
 let stream = null;
 let timer = null;
-let sending = false;
+let inFlight = 0;
+const MAX_IN_FLIGHT = 2;
 let running = false;
 
 let successfulFrames = 0;
 let lastFpsUpdate = performance.now();
+let rttMs = 0;
 
 function resetFps() {
     successfulFrames = 0;
     lastFpsUpdate = performance.now();
+    rttMs = 0;
 
     fpsLabel.textContent = "Sending FPS: 0.0";
     fpsBar.style.width = "0%";
@@ -38,14 +41,14 @@ function updateFps() {
 
     const fps = successfulFrames * 1000 / elapsed;
 
-    fpsLabel.textContent = `Sending FPS: ${fps.toFixed(1)}`;
+    fpsLabel.textContent = `Sending FPS: ${fps.toFixed(1)} · RTT ${rttMs.toFixed(0)} ms`;
 
-    const percentage = Math.min((fps / 15) * 100, 100);
+    const percentage = Math.min((fps / 30) * 100, 100);
     fpsBar.style.width = percentage + "%";
 
-    if (fps >= 12) {
+    if (fps >= 20) {
         fpsBar.style.background = "#28a745";
-    } else if (fps >= 6) {
+    } else if (fps >= 10) {
         fpsBar.style.background = "#ffc107";
     } else {
         fpsBar.style.background = "#dc3545";
@@ -58,7 +61,7 @@ function updateFps() {
 async function sendFrame() {
     if (
         !running ||
-        sending ||
+        inFlight >= MAX_IN_FLIGHT ||
         video.readyState < 2 ||
         !canvas.width ||
         !canvas.height
@@ -66,7 +69,7 @@ async function sendFrame() {
         return;
     }
 
-    sending = true;
+    inFlight++;
 
     try {
         context.drawImage(
@@ -85,6 +88,7 @@ async function sendFrame() {
             return;
         }
 
+        const sentAt = performance.now();
         const response = await fetch("/frame", {
             method: "POST",
             headers: {
@@ -98,6 +102,8 @@ async function sendFrame() {
         }
 
         if (running) {
+            const elapsed = performance.now() - sentAt;
+            rttMs = 0.8 * rttMs + 0.2 * elapsed;
             updateFps();
             status.textContent = "Camera running — frames sending.";
         }
@@ -108,7 +114,7 @@ async function sendFrame() {
 
         console.error(error);
     } finally {
-        sending = false;
+        inFlight--;
     }
 }
 
@@ -120,9 +126,9 @@ startButton.addEventListener("click", async () => {
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
                 facingMode: "environment",
-                width: { ideal: 320 },
-                height: { ideal: 240 },
-                frameRate: { ideal: 15, max: 20 }
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                frameRate: { ideal: 30 }
             },
             audio: false
         });
@@ -157,8 +163,8 @@ startButton.addEventListener("click", async () => {
         stopButton.disabled = false;
         status.textContent = "Camera started; connecting...";
 
-        // Attempt to send up to 10 frames per second.
-        timer = setInterval(sendFrame, 100);
+        // Attempt to send up to 30 frames per second.
+        timer = setInterval(sendFrame, 33);
     } catch (error) {
         running = false;
 

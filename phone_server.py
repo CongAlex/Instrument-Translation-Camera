@@ -43,6 +43,12 @@ latest_raw = None
 latest_fingers = {}
 status_text = "Press C to calibrate."
 
+pending_frame = None
+pending_lock = threading.Lock()
+pending_event = threading.Event()
+frames_received = 0
+process_ms = 0.0
+
 # Initialize MediaPipe Hand Landmarker.
 model_path = str(BASE_DIR / "models" / "hand_landmarker.task")
 
@@ -113,15 +119,26 @@ def camera_js():
 
 @app.post("/frame")
 def receive_frame():
-    global latest_frame, latest_mask, last_timestamp_ms
-    global calibration, calibration_checked, calibrating, calibration_frames
-    global latest_raw, latest_fingers, status_text
+    global pending_frame, frames_received
 
     image_bytes = np.frombuffer(request.get_data(), dtype=np.uint8)
     frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
 
     if frame is None:
         return "Invalid image", 400
+
+    # A newer frame replaces an unprocessed older one, so the server never falls behind.
+    with pending_lock:
+        pending_frame = frame
+        frames_received += 1
+    pending_event.set()
+    return "OK", 200
+
+
+def process_frame(frame):
+    global latest_frame, latest_mask, last_timestamp_ms
+    global calibration, calibration_checked, calibrating, calibration_frames
+    global latest_raw, latest_fingers, status_text
 
     # Detect the paper.
     annotated, mask = detect_paper(frame)
@@ -187,7 +204,28 @@ def receive_frame():
         latest_mask = mask
         latest_fingers = fingers
 
-    return "OK", 200
+
+def process_pending():
+    global pending_frame, process_ms
+
+    with pending_lock:
+        frame = pending_frame
+        pending_frame = None
+        pending_event.clear()
+    if frame is None:
+        return False
+
+    start = time.perf_counter()
+    process_frame(frame)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    process_ms = 0.9 * process_ms + 0.1 * elapsed_ms
+    return True
+
+
+def process_loop():
+    while True:
+        pending_event.wait()
+        process_pending()
 
 
 def run_server():
@@ -202,11 +240,23 @@ def run_server():
 
 if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
+    threading.Thread(target=process_loop, daemon=True).start()
 
     print("Waiting for phone camera frames. C = calibrate, S = save frame, Q = quit.")
 
+    last_rx_count = 0
+    last_rx_time = time.monotonic()
+    rx_fps = 0.0
+
     try:
         while True:
+            now = time.monotonic()
+            if now - last_rx_time >= 1.0:
+                with pending_lock:
+                    count = frames_received
+                rx_fps = (count - last_rx_count) / (now - last_rx_time)
+                last_rx_count, last_rx_time = count, now
+
             with frame_lock:
                 frame = (
                     latest_frame.copy()
@@ -225,6 +275,10 @@ if __name__ == "__main__":
                 frame = np.zeros((240, 320, 3), dtype=np.uint8)
             cv2.putText(
                 frame, status, (5, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
+            )
+            cv2.putText(
+                frame, f"rx {rx_fps:.1f} fps  proc {process_ms:.0f} ms", (5, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1,
             )
             if fingers:
