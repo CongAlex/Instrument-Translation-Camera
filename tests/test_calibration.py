@@ -52,6 +52,34 @@ def piano(paper):
         cv2.rectangle(paper, (x - 30, 200), (x + 30, 470), 0, -1)
 
 
+PORTRAIT = np.float32([[170, 20], [470, 20], [470, 408], [170, 408]])
+
+
+def make_portrait_sheet(draw, quad):
+    # Draw a landscape layout, then turn the paper a quarter turn (portrait).
+    paper = np.full((850, 1100), 255, np.uint8)
+    draw(paper)
+    paper = np.ascontiguousarray(np.rot90(paper))
+    h, w = paper.shape
+    src = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
+    M = cv2.getPerspectiveTransform(src, quad)
+    warped = cv2.warpPerspective(cv2.cvtColor(paper, cv2.COLOR_GRAY2BGR), M, (640, 480))
+    inside = cv2.warpPerspective(np.full((h, w), 255, np.uint8), M, (640, 480))
+    canvas = np.full((480, 640, 3), 40, np.uint8)
+    canvas[inside > 0] = warped[inside > 0]
+    return canvas, M
+
+
+def small_piano(paper):
+    fx = lambda v: int(400 + 0.4 * (v - 200))
+    fy = lambda v: int(300 + 0.4 * (v - 200))
+    cv2.rectangle(paper, (fx(200), fy(200)), (fx(900), fy(650)), 0, 5)
+    for x in range(300, 900, 100):
+        cv2.line(paper, (fx(x), fy(200)), (fx(x), fy(650)), 0, 5)
+    for x in (300, 400, 600, 700, 800):
+        cv2.rectangle(paper, (fx(x) - 12, fy(200)), (fx(x) + 12, fy(470)), 0, -1)
+
+
 def at(cal, M, x, y):
     u, v = cv2.perspectiveTransform(np.float32([[[x, y]]]), M)[0, 0]
     return region_at(cal, u / 640, v / 480)
@@ -79,6 +107,18 @@ class CalibrationTests(unittest.TestCase):
 
     def test_piano_is_chromatic(self):
         regions = build_calibration([make_sheet(piano, STRAIGHT)[0]])["regions"]
+        kinds = "".join(r["kind"][0].upper() for r in regions)
+        self.assertEqual(len(regions), 12)
+        self.assertEqual(kinds, "OSOSOOSOSOSO")
+
+    def test_sideways_piano_is_chromatic(self):
+        regions = build_calibration([make_portrait_sheet(piano, PORTRAIT)[0]])["regions"]
+        kinds = "".join(r["kind"][0].upper() for r in regions)
+        self.assertEqual(len(regions), 12)
+        self.assertEqual(kinds, "OSOSOOSOSOSO")
+
+    def test_small_keys(self):
+        regions = build_calibration([make_sheet(small_piano, STRAIGHT)[0]])["regions"]
         kinds = "".join(r["kind"][0].upper() for r in regions)
         self.assertEqual(len(regions), 12)
         self.assertEqual(kinds, "OSOSOOSOSOSO")

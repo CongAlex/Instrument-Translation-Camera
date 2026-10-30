@@ -184,6 +184,10 @@ def process_frame(frame):
                 finally:
                     calibrating = False
                     calibration_frames = []
+        frame_size = (frame.shape[1], frame.shape[0])
+        if calibration is not None and calibration["frame_size"] != frame_size:
+            calibration = None
+            status_text = "Frame size changed (phone rotated?): press C to recalibrate."
         cal = calibration if not calibrating else None
 
     fingers = {}

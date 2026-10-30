@@ -13,7 +13,7 @@ BORDER_PX = 12               # Ignore ink this close to the paper edge.
 DARK_LEVEL = 100             # Anything darker than this is ink.
 SPECK_AREA = 50
 LINE_KERNEL = 15             # Wider than outlines, narrower than solid boxes.
-MIN_REGION_AREA = 1000
+MIN_REGION_AREA = 300  # About 0.2 cm²; allows small keys.
 GAP_KERNEL = 11            # Closes small breaks in hand-drawn outlines.
 SNAP_PX = 20                 # About 0.5 cm.
 
@@ -56,6 +56,25 @@ def flatten(gray, corners):
     dst = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
     H = cv2.getPerspectiveTransform(corners, dst)
     return cv2.warpPerspective(gray, H, (w, h)), H
+
+
+def order_regions(cents, kinds):
+    # Pianos: "up" points from the white keys toward the black keys; number
+    # left to right with up at the top. Anything else: plain left to right.
+    solid = [cents[t] for t in kinds if kinds[t] == "solid"]
+    outlined = [cents[t] for t in kinds if kinds[t] == "outlined"]
+    if solid and outlined:
+        up = np.mean(solid, axis=0) - np.mean(outlined, axis=0)
+        norm = np.linalg.norm(up)
+        if norm > 5:
+            ux, uy = up / norm
+            rx, ry = -uy, ux
+            return sorted(
+                kinds,
+                key=lambda t: (cents[t][0] * rx + cents[t][1] * ry,
+                               -(cents[t][0] * ux + cents[t][1] * uy)),
+            )
+    return sorted(kinds, key=lambda t: cents[t])
 
 
 def find_regions(flat):
@@ -115,12 +134,12 @@ def find_regions(flat):
             flat_map[m] = t
             kinds[t] = kind
 
-    # Number left to right.
+    # Number along the keyboard (see order_regions).
     cents = {}
     for t in kinds:
         ys, xs = np.nonzero(flat_map == t)
         cents[t] = (xs.mean(), ys.mean())
-    order = sorted(kinds, key=lambda t: cents[t])
+    order = order_regions(cents, kinds)
     lut = np.zeros(len(kinds) + 1, np.uint16)
     regions = []
     for new_id, old in enumerate(order, 1):

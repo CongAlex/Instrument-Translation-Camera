@@ -72,6 +72,14 @@ async function sendFrame() {
     inFlight++;
 
     try {
+        // Follow phone rotation: the video swaps width and height.
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            resolution.textContent =
+                `Actual resolution: ${canvas.width} × ${canvas.height}`;
+        }
+
         context.drawImage(
             video,
             0,
