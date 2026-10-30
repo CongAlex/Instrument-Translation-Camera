@@ -14,6 +14,7 @@ DARK_LEVEL = 100             # Anything darker than this is ink.
 SPECK_AREA = 50
 LINE_KERNEL = 15             # Wider than outlines, narrower than solid boxes.
 MIN_REGION_AREA = 1000
+GAP_KERNEL = 11            # Closes small breaks in hand-drawn outlines.
 SNAP_PX = 20                 # About 0.5 cm.
 
 
@@ -47,14 +48,18 @@ def find_paper_corners(frame_bgr):
 
 
 def flatten(gray, corners):
-    dst = np.float32(
-        [[0, 0], [FLAT_W - 1, 0], [FLAT_W - 1, FLAT_H - 1], [0, FLAT_H - 1]]
-    )
+    tl, tr, br, bl = corners
+    width = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
+    height = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
+    # Portrait paper flattens to a portrait image.
+    w, h = (FLAT_H, FLAT_W) if height > width else (FLAT_W, FLAT_H)
+    dst = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
     H = cv2.getPerspectiveTransform(corners, dst)
-    return cv2.warpPerspective(gray, H, (FLAT_W, FLAT_H)), H
+    return cv2.warpPerspective(gray, H, (w, h)), H
 
 
 def find_regions(flat):
+    fh, fw = flat.shape
     blurred = cv2.GaussianBlur(flat, (5, 5), 0)
     adaptive = cv2.adaptiveThreshold(
         blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -85,20 +90,23 @@ def find_regions(flat):
     ]
 
     # Outlined regions: white areas enclosed by ink.
-    closed = cv2.dilate(ink, np.ones((3, 3), np.uint8))
+    closed = cv2.morphologyEx(
+        ink, cv2.MORPH_CLOSE, np.ones((GAP_KERNEL, GAP_KERNEL), np.uint8)
+    )
+    closed = cv2.dilate(closed, np.ones((3, 3), np.uint8))
     white = np.where(closed == 0, 255, 0).astype(np.uint8)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(white, connectivity=4)
     outlined = []
     for i in range(1, n):
         x, y, w, h, area = stats[i]
-        if x == 0 or y == 0 or x + w == FLAT_W or y + h == FLAT_H:
+        if x == 0 or y == 0 or x + w == fw or y + h == fh:
             continue
         if area < MIN_REGION_AREA:
             continue
         outlined.append(labels == i)
 
     # Paint outlined first, then solid on top, with temporary IDs.
-    flat_map = np.zeros((FLAT_H, FLAT_W), np.uint16)
+    flat_map = np.zeros((fh, fw), np.uint16)
     kinds = {}
     t = 0
     for kind, masks in (("outlined", outlined), ("solid", solids)):
@@ -253,7 +261,7 @@ def draw_calibration(frame, cal, active_ids):
 
 
 def render_flat_regions(flat_map, regions):
-    out = np.full((FLAT_H, FLAT_W, 3), (40, 40, 40), np.uint8)
+    out = np.full((*flat_map.shape, 3), (40, 40, 40), np.uint8)
     for rid in np.unique(flat_map):
         if rid:
             out[flat_map == rid] = region_color(int(rid))

@@ -107,6 +107,18 @@ class CalibrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_calibration([np.full((480, 640, 3), 40, np.uint8)])
 
+    def test_hand_drawn_box_portrait(self):
+        img = cv2.imread(str(Path(__file__).parent / "fixtures" / "pen_box_portrait.jpg"))
+        cal = build_calibration([img])
+        kinds = [r["kind"] for r in cal["regions"]]
+        self.assertEqual(kinds.count("outlined"), 1)
+        self.assertGreaterEqual(kinds.count("solid"), 1)
+        self.assertEqual(cal["flat_map"].shape, (1100, 850))
+
+    def test_landscape_stays_landscape(self):
+        cal = build_calibration([make_sheet(solid, STRAIGHT)[0]])
+        self.assertEqual(cal["flat_map"].shape, (850, 1100))
+
 
 if __name__ == "__main__":
     unittest.main()
