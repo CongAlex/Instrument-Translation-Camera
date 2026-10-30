@@ -1,4 +1,5 @@
 import csv
+import os
 import subprocess
 import sys
 import tempfile
@@ -81,6 +82,8 @@ class M0Tests(unittest.TestCase):
         self.assertTrue(Path(f"{self.prefix}_report.txt").exists())
         self.assertTrue(Path(f"{self.prefix}_report.png").exists())
 
+    # Takes ~45 s (real-time demo stream), so it only runs on request.
+    @unittest.skipUnless(os.environ.get("M0_SMOKE"), "set M0_SMOKE=1 to run")
     def test_recorder_demo_smoke(self):
         with tempfile.TemporaryDirectory() as tmp:
             prefix = str(Path(tmp) / "s")
