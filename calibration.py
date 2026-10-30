@@ -58,13 +58,27 @@ def flatten(gray, corners):
     return cv2.warpPerspective(gray, H, (w, h)), H
 
 
-def order_regions(cents, kinds):
-    # Pianos: "up" points from the white keys toward the black keys; number
-    # left to right with up at the top. Anything else: plain left to right.
-    solid = [cents[t] for t in kinds if kinds[t] == "solid"]
-    outlined = [cents[t] for t in kinds if kinds[t] == "outlined"]
-    if solid and outlined:
-        up = np.mean(solid, axis=0) - np.mean(outlined, axis=0)
+def order_regions(cents, kinds, flat_map):
+    # Pianos: "up" points from each black key's neighbouring white keys toward
+    # the black key; number left to right with up at the top. Using only
+    # neighbours keeps stray boxes elsewhere on the page from skewing "up".
+    # Anything else: plain left to right.
+    kernel = np.ones((9, 9), np.uint8)
+    pulls = []
+    for t in kinds:
+        if kinds[t] != "solid":
+            continue
+        near = cv2.dilate((flat_map == t).astype(np.uint8), kernel) > 0
+        whites = [
+            n for n in np.unique(flat_map[near])
+            if n and kinds.get(int(n)) == "outlined"
+        ]
+        if whites:
+            pulls.append(
+                np.subtract(cents[t], np.mean([cents[int(n)] for n in whites], axis=0))
+            )
+    if pulls:
+        up = np.mean(pulls, axis=0)
         norm = np.linalg.norm(up)
         if norm > 5:
             ux, uy = up / norm
@@ -139,7 +153,7 @@ def find_regions(flat):
     for t in kinds:
         ys, xs = np.nonzero(flat_map == t)
         cents[t] = (xs.mean(), ys.mean())
-    order = order_regions(cents, kinds)
+    order = order_regions(cents, kinds, flat_map)
     lut = np.zeros(len(kinds) + 1, np.uint16)
     regions = []
     for new_id, old in enumerate(order, 1):

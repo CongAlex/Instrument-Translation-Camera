@@ -43,6 +43,14 @@ def outlined(paper):
         cv2.rectangle(paper, (x0, y0), (x1, y1), 0, 8)
 
 
+def two_keys_and_box(paper):
+    # Like the user's sketch: white, black, white, plus a box past the end.
+    cv2.rectangle(paper, (200, 200), (400, 650), 0, 10)
+    cv2.line(paper, (300, 200), (300, 650), 0, 10)
+    cv2.rectangle(paper, (270, 200), (330, 470), 0, -1)
+    cv2.rectangle(paper, (700, 200), (1000, 650), 0, 8)
+
+
 def piano(paper):
     # One octave C..B: white keys 100 wide from x=200, black keys over boundaries.
     cv2.rectangle(paper, (200, 200), (900, 650), 0, 10)
@@ -116,6 +124,12 @@ class CalibrationTests(unittest.TestCase):
         kinds = "".join(r["kind"][0].upper() for r in regions)
         self.assertEqual(len(regions), 12)
         self.assertEqual(kinds, "OSOSOOSOSOSO")
+
+    def test_stray_box_does_not_rotate_order(self):
+        for sheet in (make_sheet(two_keys_and_box, STRAIGHT), make_portrait_sheet(two_keys_and_box, PORTRAIT)):
+            regions = build_calibration([sheet[0]])["regions"]
+            self.assertEqual("".join(r["kind"][0].upper() for r in regions), "OSOO")
+            self.assertLess(regions[0]["area"], regions[3]["area"])
 
     def test_small_keys(self):
         regions = build_calibration([make_sheet(small_piano, STRAIGHT)[0]])["regions"]
