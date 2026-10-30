@@ -2,3 +2,5 @@ opencv-python==5.0.0.93
 mediapipe==1.1.1
 numpy==2.5.4
 flask==3.1.3
+tap-python-sdk @ git+https://github.com/TapWithUs/tap-python-sdk.git
+matplotlib>=3.7

@@ -91,6 +91,13 @@ The template is black solid boxes or black outlines on white Letter paper, lands
   paper texture or shadows become regions) and **Key** (min black key) (lower it for small drawings).
   Changes re-detect instantly.
 
+## Tap Strap (M0)
+
+`tapstrap/` reads raw finger accelerometer data from a Tap Strap 2 (`python stream_raw.py --demo` for a live readout without a strap).
+
+- `python m0_record.py` runs a prompted session (clicks cue each tap) and writes `recordings/m0_<time>_{fingers,imu,cues}.csv`; the columns are documented in the script. Add `--demo` to try it without a strap.
+- `python m0_analyze.py recordings/m0_<time>` writes `_report.txt` and `_report.png` (stream health, per-finger separability, crosstalk, a simple detector's precision/recall).
+
 ## Tests
 
 Run the unit tests from the repo root:
