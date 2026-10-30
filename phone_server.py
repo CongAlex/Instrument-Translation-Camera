@@ -245,6 +245,27 @@ def process_loop():
         process_pending()
 
 
+SETTINGS_HELP = [
+    "Sensitivity (default 50)",
+    "  Raise if lines or keys are missed.",
+    "  Lower if shadows or paper texture become regions.",
+    "Min black key (default 15)",
+    "  Lower for small drawings where black keys",
+    "  vanish or merge into white keys.",
+    "Changes re-detect ~0.3 s after you stop dragging.",
+]
+
+
+def settings_help_image():
+    image = np.full((22 * len(SETTINGS_HELP) + 12, 470, 3), 30, np.uint8)
+    for i, line in enumerate(SETTINGS_HELP):
+        cv2.putText(
+            image, line, (8, 22 + 22 * i),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (230, 230, 230), 1,
+        )
+    return image
+
+
 def run_server():
     app.run(
         host="0.0.0.0",
@@ -262,6 +283,8 @@ if __name__ == "__main__":
     print("Waiting for phone camera frames. C = calibrate, S = save frame, Q = quit.")
 
     cv2.namedWindow(SETTINGS_WINDOW)
+    # Trackbars have no tooltips, so the window shows a short guide instead.
+    cv2.imshow(SETTINGS_WINDOW, settings_help_image())
     cv2.createTrackbar("Sensitivity", SETTINGS_WINDOW, 50, 100, lambda v: None)
     cv2.createTrackbar("Min black key", SETTINGS_WINDOW, 15, 31, lambda v: None)
     applied = (None, None)    # Settings the trackbars were last set to.
