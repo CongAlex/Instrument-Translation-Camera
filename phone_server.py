@@ -1,4 +1,5 @@
 import argparse
+import os
 import threading
 import time
 from pathlib import Path
@@ -447,6 +448,11 @@ if __name__ == "__main__":
                     print(path)
                     with frame_lock:
                         status_text = f"Saved {path.name}"
+    except KeyboardInterrupt:
+        pass
     finally:
-        hand_landmarker.close()
+        # Don't call hand_landmarker.close(): it can block forever while the
+        # worker thread is mid-detection, which froze the terminal on Ctrl+C.
+        # Exiting the process frees the model, camera and windows anyway.
         cv2.destroyAllWindows()
+        os._exit(0)
