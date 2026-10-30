@@ -11,6 +11,7 @@ FLAT_W, FLAT_H = 1100, 850   # US Letter landscape, 100 px per inch.
 FINGERTIPS = {"Thumb": 4, "Index": 8, "Middle": 12, "Ring": 16, "Pinky": 20}
 BORDER_PX = 12               # Ignore ink this close to the paper edge.
 DARK_LEVEL = 100             # Anything darker than this is ink.
+INK_RATIO = 0.7            # Darker than this fraction of nearby paper is ink.
 SPECK_AREA = 50
 LINE_KERNEL = 15             # Wider than outlines, narrower than solid boxes.
 MIN_REGION_AREA = 300  # About 0.2 cm²; allows small keys.
@@ -41,10 +42,13 @@ def find_paper_corners(frame_bgr):
     h, w = frame_bgr.shape[:2]
     if cv2.contourArea(c) < 0.2 * h * w:
         return None
-    approx = cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)
-    if len(approx) != 4:
-        return None
-    return order_corners(approx.reshape(4, 2).astype(np.float32))
+    # The hull ignores torn edges and dents; rounded corners need a looser fit.
+    hull = cv2.convexHull(c)
+    for eps in (0.02, 0.03, 0.04, 0.05):
+        approx = cv2.approxPolyDP(hull, eps * cv2.arcLength(hull, True), True)
+        if len(approx) == 4:
+            return order_corners(approx.reshape(4, 2).astype(np.float32))
+    return None
 
 
 def flatten(gray, corners):
@@ -94,12 +98,19 @@ def order_regions(cents, kinds, flat_map):
 def find_regions(flat):
     fh, fw = flat.shape
     blurred = cv2.GaussianBlur(flat, (5, 5), 0)
+    # Ink = locally darker (adaptive) AND clearly darker than nearby paper.
+    # Faint printed ruled lines pass the first test but sit near 0.8 of the
+    # paper's brightness (pen is near 0.3), so the ratio test rejects them.
+    # Large solid boxes, which adaptive hollows out, are caught by the dark test.
     adaptive = cv2.adaptiveThreshold(
         blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY_INV, 51, 10,
     )
-    # Adaptive alone hollows out large solid boxes, so add a global dark test.
-    ink = adaptive | np.where(blurred < DARK_LEVEL, 255, 0).astype(np.uint8)
+    paper = cv2.dilate(blurred, np.ones((31, 31), np.uint8)).astype(np.float32)
+    ratio = blurred / np.maximum(paper, 1)
+    ink = np.where(
+        ((adaptive > 0) & (ratio < INK_RATIO)) | (blurred < DARK_LEVEL), 255, 0
+    ).astype(np.uint8)
 
     ink[:BORDER_PX] = 0
     ink[-BORDER_PX:] = 0
