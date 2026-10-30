@@ -8,6 +8,7 @@ Execution order: 001 → 002 → 003. Each builds on the previous commit.
 | 002 | [Paper region calibration (M-1)](002-paper-region-calibration.md) | DONE: approved, commit d5f576d on branch `worktree-agent-aaddf3d3f2df9cee2` (includes 001), not merged | 001 |
 | 003 | [Calibration robustness](003-calibration-robustness.md) | DRAFT | 002 |
 | 004 | [Hand-drawn outlines and portrait paper](004-hand-drawn-outlines-and-portrait.md) | DONE: approved, commit b9ff427 on branch `worktree-agent-a6f7368f91b5eff23`, not merged | 002 |
+| 006 | [Piano ordering, small keys, rotation](006-piano-ordering-small-keys-rotation.md) | DONE: merged to main (aa9324e) | 005 |
 | 005 | [Frame rate and 640×480 capture](005-frame-rate-and-resolution.md) | DONE: approved, commit 251a10b on branch `worktree-agent-ac296e52fc4e88839` (includes 004), not merged | 004 |
 
 ## Decisions from the design-doc grilling (2026-10-29)
