@@ -201,6 +201,13 @@ class CalibrationTests(unittest.TestCase):
         cal = build_calibration([make_sheet(piano, STRAIGHT)[0]])
         self.assertEqual(rebuild_calibration(cal, INK_RATIO, LINE_KERNEL)["regions"], cal["regions"])
 
+    def test_shadow_is_not_a_black_key(self):
+        # Real Camo 1280x720 frame: a soft shadow on the paper used to pass the
+        # absolute dark test and become a huge "solid" region.
+        img = cv2.imread(str(Path(__file__).parent / "fixtures" / "camo_shadow_piano.jpg"))
+        regions = build_calibration([img])["regions"]
+        self.assertTrue(all(r["area"] < 5000 for r in regions))
+
     def test_landscape_stays_landscape(self):
         cal = build_calibration([make_sheet(solid, STRAIGHT)[0]])
         self.assertEqual(cal["flat_map"].shape, (850, 1100))

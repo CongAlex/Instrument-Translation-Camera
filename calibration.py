@@ -10,7 +10,7 @@ from paper_detector import detect_paper
 FLAT_W, FLAT_H = 1100, 850   # US Letter landscape, 100 px per inch.
 FINGERTIPS = {"Thumb": 4, "Index": 8, "Middle": 12, "Ring": 16, "Pinky": 20}
 BORDER_PX = 12               # Ignore ink this close to the paper edge.
-DARK_LEVEL = 100             # Anything darker than this is ink.
+DARK_RATIO = 0.7             # Darker than this fraction of the wider paper is solid ink.
 INK_RATIO = 0.7            # Darker than this fraction of nearby paper is ink.
 SPECK_AREA = 50
 LINE_KERNEL = 15             # Wider than outlines, narrower than solid boxes.
@@ -108,8 +108,12 @@ def find_regions(flat, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
     )
     paper = cv2.dilate(blurred, np.ones((31, 31), np.uint8)).astype(np.float32)
     ratio = blurred / np.maximum(paper, 1)
+    # Solid boxes are too big for the 31 px estimate, so compare them with a
+    # much wider one. Relative, so a soft shadow never counts as a black box.
+    wide = cv2.dilate(blurred, np.ones((151, 151), np.uint8)).astype(np.float32)
+    dark = (blurred < 100) & (blurred < DARK_RATIO * wide)
     ink = np.where(
-        ((adaptive > 0) & (ratio < ink_ratio)) | (blurred < DARK_LEVEL), 255, 0
+        ((adaptive > 0) & (ratio < ink_ratio)) | dark, 255, 0
     ).astype(np.uint8)
 
     ink[:BORDER_PX] = 0
