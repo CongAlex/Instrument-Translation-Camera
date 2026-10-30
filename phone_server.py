@@ -2,6 +2,7 @@ import argparse
 import os
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import cv2
@@ -289,9 +290,13 @@ def process_pending():
 
 
 def process_loop():
+    # One bad frame must not kill this thread: the window would freeze for good.
     while True:
         pending_event.wait()
-        process_pending()
+        try:
+            process_pending()
+        except Exception:
+            traceback.print_exc()
 
 
 SETTINGS_HELP = [
