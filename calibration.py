@@ -278,13 +278,23 @@ def region_color(region_id):
 
 
 def draw_calibration(frame, cal, active_ids):
+    # Idle regions are a faint tint; touched regions are a strong yellow fill.
     overlay = frame.copy()
     for rid, contour in cal["outlines"].items():
-        color = (0, 255, 255) if rid in active_ids else region_color(rid)
-        cv2.fillPoly(overlay, [contour], color)
-    frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
+        cv2.fillPoly(overlay, [contour], region_color(rid))
+    frame = cv2.addWeighted(overlay, 0.25, frame, 0.75, 0)
+    if active_ids:
+        overlay = frame.copy()
+        for rid, contour in cal["outlines"].items():
+            if rid in active_ids:
+                cv2.fillPoly(overlay, [contour], (0, 255, 255))
+        frame = cv2.addWeighted(overlay, 0.75, frame, 0.25, 0)
     for rid, contour in cal["outlines"].items():
-        cv2.polylines(frame, [contour], True, (255, 255, 255), 1)
+        active = rid in active_ids
+        cv2.polylines(
+            frame, [contour], True,
+            (0, 255, 255) if active else (255, 255, 255), 3 if active else 1,
+        )
         cx, cy = contour.reshape(-1, 2).mean(axis=0)
         cv2.putText(
             frame, str(rid), (int(cx), int(cy)),
