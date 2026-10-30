@@ -12,7 +12,7 @@ const context = canvas.getContext("2d");
 let stream = null;
 let timer = null;
 let inFlight = 0;
-const MAX_IN_FLIGHT = 2;
+const MAX_IN_FLIGHT = 4;
 let running = false;
 
 let successfulFrames = 0;
