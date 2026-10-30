@@ -95,7 +95,7 @@ def order_regions(cents, kinds, flat_map):
     return sorted(kinds, key=lambda t: cents[t])
 
 
-def find_regions(flat):
+def find_regions(flat, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
     fh, fw = flat.shape
     blurred = cv2.GaussianBlur(flat, (5, 5), 0)
     # Ink = locally darker (adaptive) AND clearly darker than nearby paper.
@@ -109,7 +109,7 @@ def find_regions(flat):
     paper = cv2.dilate(blurred, np.ones((31, 31), np.uint8)).astype(np.float32)
     ratio = blurred / np.maximum(paper, 1)
     ink = np.where(
-        ((adaptive > 0) & (ratio < INK_RATIO)) | (blurred < DARK_LEVEL), 255, 0
+        ((adaptive > 0) & (ratio < ink_ratio)) | (blurred < DARK_LEVEL), 255, 0
     ).astype(np.uint8)
 
     ink[:BORDER_PX] = 0
@@ -125,7 +125,7 @@ def find_regions(flat):
 
     # Solid regions: ink that survives opening with a kernel wider than lines.
     opened = cv2.morphologyEx(
-        ink, cv2.MORPH_OPEN, np.ones((LINE_KERNEL, LINE_KERNEL), np.uint8)
+        ink, cv2.MORPH_OPEN, np.ones((line_kernel, line_kernel), np.uint8)
     )
     n, labels, stats, _ = cv2.connectedComponentsWithStats(opened, connectivity=8)
     solids = [
@@ -205,13 +205,13 @@ def region_outlines(flat_map, H_inv):
     return outlines
 
 
-def build_calibration(frames):
+def build_calibration(frames, ink_ratio=INK_RATIO, line_kernel=LINE_KERNEL):
     reference = np.median(np.stack(frames), axis=0).astype(np.uint8)
     corners = find_paper_corners(reference)
     if corners is None:
         raise ValueError("Can't see the whole paper (need 4 clear corners).")
     flat, H = flatten(cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY), corners)
-    flat_map, regions, _ = find_regions(flat)
+    flat_map, regions, _ = find_regions(flat, ink_ratio, line_kernel)
     if not regions:
         raise ValueError("No black boxes or outlines found on the paper.")
     H_inv = np.linalg.inv(H)
@@ -231,7 +231,13 @@ def build_calibration(frames):
         "outlines": region_outlines(flat_map, H_inv),
         "reference": reference,
         "timestamp": time.time(),
+        "settings": {"ink_ratio": float(ink_ratio), "line_kernel": int(line_kernel)},
     }
+
+
+def rebuild_calibration(cal, ink_ratio, line_kernel):
+    # Re-detect on the saved reference image; no new frames needed.
+    return build_calibration([cal["reference"]], ink_ratio, line_kernel)
 
 
 def region_at(cal, x_norm, y_norm):
@@ -256,6 +262,8 @@ def save_calibration(cal, directory):
     )
     with open(Path(directory) / "regions.json", "w") as f:
         json.dump(cal["regions"], f, indent=2)
+    with open(Path(directory) / "settings.json", "w") as f:
+        json.dump(cal["settings"], f)
 
 
 def load_calibration(directory, frame_shape):
@@ -269,6 +277,10 @@ def load_calibration(directory, frame_shape):
         return None
     with open(json_path) as f:
         regions = json.load(f)
+    settings = {"ink_ratio": INK_RATIO, "line_kernel": LINE_KERNEL}
+    if (Path(directory) / "settings.json").exists():
+        with open(Path(directory) / "settings.json") as f:
+            settings = json.load(f)
     return {
         "key_map": data["key_map"],
         "flat_map": data["flat_map"],
@@ -280,6 +292,7 @@ def load_calibration(directory, frame_shape):
         "outlines": region_outlines(data["flat_map"], data["H_inv"]),
         "reference": data["reference"],
         "timestamp": float(data["timestamp"]),
+        "settings": settings,
     }
 
 

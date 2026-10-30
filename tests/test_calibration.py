@@ -10,7 +10,10 @@ import numpy as np
 
 from calibration import (
     build_calibration,
+    INK_RATIO,
+    LINE_KERNEL,
     load_calibration,
+    rebuild_calibration,
     region_at,
     save_calibration,
 )
@@ -179,6 +182,24 @@ class CalibrationTests(unittest.TestCase):
             img = cv2.imread(str(Path(__file__).parent / "fixtures" / name))
             kinds = "".join(r["kind"][0].upper() for r in build_calibration([img])["regions"])
             self.assertEqual(kinds, "OSOO", name)
+
+    def test_blank_piano_needs_higher_sensitivity(self):
+        img = cv2.imread(str(Path(__file__).parent / "fixtures" / "blank_piano_small.jpg"))
+        cal = build_calibration([img])
+        self.assertLess(len(cal["regions"]), 12)
+        kinds = "".join(r["kind"][0].upper() for r in rebuild_calibration(cal, 0.8, 15)["regions"])
+        self.assertEqual(kinds, "OSOSOOSOSOSO")
+
+    def test_settings_roundtrip(self):
+        cal = build_calibration([make_sheet(solid, STRAIGHT)[0]], ink_ratio=0.75, line_kernel=11)
+        with tempfile.TemporaryDirectory() as d:
+            save_calibration(cal, d)
+            self.assertEqual(load_calibration(d, (480, 640, 3))["settings"],
+                             {"ink_ratio": 0.75, "line_kernel": 11})
+
+    def test_rebuild_matches_build(self):
+        cal = build_calibration([make_sheet(piano, STRAIGHT)[0]])
+        self.assertEqual(rebuild_calibration(cal, INK_RATIO, LINE_KERNEL)["regions"], cal["regions"])
 
     def test_landscape_stays_landscape(self):
         cal = build_calibration([make_sheet(solid, STRAIGHT)[0]])

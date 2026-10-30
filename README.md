@@ -87,6 +87,9 @@ The template is black solid boxes or black outlines on white Letter paper, lands
 - Press `S` to save the current frame to `samples/`.
 - `python calibrate_image.py samples/<file>.jpg` writes a `_debug.png` showing the
   flattened paper, the ink mask and the numbered regions.
+- The **Calibration settings** window has **Sensitivity** (raise it if lines are missed, lower it if
+  paper texture or shadows become regions) and **Min black key** (lower it for small drawings).
+  Changes re-detect instantly.
 
 ## Tests
 

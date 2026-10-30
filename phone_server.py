@@ -11,9 +11,12 @@ from mediapipe.tasks.python import vision
 
 from calibration import (
     FINGERTIPS,
+    INK_RATIO,
+    LINE_KERNEL,
     build_calibration,
     draw_calibration,
     load_calibration,
+    rebuild_calibration,
     region_at,
     save_calibration,
 )
@@ -44,6 +47,9 @@ calibration_frames = []
 latest_raw = None
 latest_fingers = {}
 status_text = "Press C to calibrate."
+SETTINGS_WINDOW = "Calibration settings"
+ink_ratio_setting = INK_RATIO
+line_kernel_setting = LINE_KERNEL
 
 pending_frame = None
 pending_lock = threading.Lock()
@@ -141,6 +147,7 @@ def process_frame(frame):
     global latest_frame, latest_mask, last_timestamp_ms
     global calibration, calibration_checked, calibrating, calibration_frames
     global latest_raw, latest_fingers, status_text
+    global ink_ratio_setting, line_kernel_setting
 
     # Detect the paper.
     annotated, mask = detect_paper(frame)
@@ -164,6 +171,8 @@ def process_frame(frame):
             calibration = load_calibration(CALIBRATION_DIR, frame.shape)
             calibration_checked = True
             if calibration is not None:
+                ink_ratio_setting = calibration["settings"]["ink_ratio"]
+                line_kernel_setting = calibration["settings"]["line_kernel"]
                 status_text = (
                     f"Loaded calibration: {len(calibration['regions'])} regions."
                 )
@@ -175,7 +184,9 @@ def process_frame(frame):
                 calibration_frames.append(frame)
             if len(calibration_frames) >= CALIBRATION_FRAMES:
                 try:
-                    new_cal = build_calibration(calibration_frames)
+                    new_cal = build_calibration(
+                        calibration_frames, ink_ratio_setting, line_kernel_setting
+                    )
                     save_calibration(new_cal, CALIBRATION_DIR)
                     calibration = new_cal
                     status_text = f"Calibrated: {len(new_cal['regions'])} regions."
@@ -250,6 +261,12 @@ if __name__ == "__main__":
 
     print("Waiting for phone camera frames. C = calibrate, S = save frame, Q = quit.")
 
+    cv2.namedWindow(SETTINGS_WINDOW)
+    cv2.createTrackbar("Sensitivity", SETTINGS_WINDOW, 50, 100, lambda v: None)
+    cv2.createTrackbar("Min black key", SETTINGS_WINDOW, 15, 31, lambda v: None)
+    applied = (None, None)    # Settings the trackbars were last set to.
+    pending = None            # (settings, time first seen) while debouncing.
+
     last_rx_count = 0
     last_rx_time = time.monotonic()
     rx_fps = 0.0
@@ -276,6 +293,40 @@ if __name__ == "__main__":
                 )
                 status = status_text
                 fingers = dict(latest_fingers)
+
+            with frame_lock:
+                if calibration is not None:
+                    cs = calibration["settings"]
+                    if (cs["ink_ratio"], cs["line_kernel"]) != applied:
+                        applied = (cs["ink_ratio"], cs["line_kernel"])
+                        cv2.setTrackbarPos(
+                            "Sensitivity", SETTINGS_WINDOW,
+                            round((cs["ink_ratio"] - 0.5) / 0.4 * 100),
+                        )
+                        cv2.setTrackbarPos("Min black key", SETTINGS_WINDOW, cs["line_kernel"])
+            sens = cv2.getTrackbarPos("Sensitivity", SETTINGS_WINDOW)
+            kern = max(3, cv2.getTrackbarPos("Min black key", SETTINGS_WINDOW))
+            want = (0.5 + 0.4 * sens / 100, kern)
+            if want == (ink_ratio_setting, line_kernel_setting):
+                pending = None
+            elif pending is None or pending[0] != want:
+                pending = (want, now)
+            elif now - pending[1] >= 0.3:
+                pending = None
+                with frame_lock:
+                    ink_ratio_setting, line_kernel_setting = want
+                    if calibration is not None and not calibrating:
+                        try:
+                            new_cal = rebuild_calibration(calibration, *want)
+                            save_calibration(new_cal, CALIBRATION_DIR)
+                            calibration = new_cal
+                            applied = want
+                            status_text = (
+                                f"Re-detected: {len(new_cal['regions'])} regions "
+                                f"(sens {sens}, key {kern})"
+                            )
+                        except ValueError as error:
+                            status_text = str(error)
 
             if frame is None:
                 frame = np.zeros((240, 320, 3), dtype=np.uint8)
