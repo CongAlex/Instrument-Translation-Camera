@@ -24,6 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 # Frames are small JPEGs; reject anything larger.
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+# Always revalidate the page and script so phones pick up changes.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 latest_frame = None
 latest_mask = None
