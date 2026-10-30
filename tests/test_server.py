@@ -62,6 +62,11 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(phone_server.process_pending())
         self.assertFalse(phone_server.process_pending())
 
+    def test_submit_frame_feeds_pipeline(self):
+        # The --camera path uses submit_frame directly, without HTTP.
+        phone_server.submit_frame(make_image())
+        self.assertTrue(phone_server.process_pending())
+
     def test_frame_counter(self):
         before = phone_server.frames_received
         self.client.post("/frame", data=jpeg_bytes())

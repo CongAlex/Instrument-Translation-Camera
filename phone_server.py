@@ -1,3 +1,4 @@
+import argparse
 import threading
 import time
 from pathlib import Path
@@ -135,12 +136,49 @@ def receive_frame():
     if frame is None:
         return "Invalid image", 400
 
+    submit_frame(frame)
+    return "OK", 200
+
+
+def submit_frame(frame):
+    global pending_frame, frames_received
+
     # A newer frame replaces an unprocessed older one, so the server never falls behind.
     with pending_lock:
         pending_frame = frame
         frames_received += 1
     pending_event.set()
-    return "OK", 200
+
+
+def open_camera(index):
+    # DirectShow is the Windows backend that lists virtual webcams like Camo.
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    return cap
+
+
+def list_cameras(max_index=6):
+    for index in range(max_index):
+        cap = open_camera(index)
+        ok, frame = cap.read() if cap.isOpened() else (False, None)
+        cap.release()
+        if ok:
+            print(f"  camera {index}: {frame.shape[1]}x{frame.shape[0]}")
+
+
+def camera_loop(index):
+    # Feed a local webcam (e.g. the iPhone via Camo over USB) into the same pipeline.
+    cap = open_camera(index)
+    if not cap.isOpened():
+        print(f"Can't open camera {index}. Try --list-cameras.")
+        return
+    while True:
+        ok, frame = cap.read()
+        if ok:
+            submit_frame(frame)
+        else:
+            time.sleep(0.05)
 
 
 def process_frame(frame):
@@ -277,10 +315,28 @@ def run_server():
 
 
 if __name__ == "__main__":
-    threading.Thread(target=run_server, daemon=True).start()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--camera", type=int, metavar="N",
+        help="read webcam N (e.g. iPhone via Camo over USB) instead of the phone page",
+    )
+    parser.add_argument(
+        "--list-cameras", action="store_true", help="print working camera indices and exit",
+    )
+    args = parser.parse_args()
+    if args.list_cameras:
+        list_cameras()
+        raise SystemExit
+
+    if args.camera is None:
+        threading.Thread(target=run_server, daemon=True).start()
+        source = "phone camera frames"
+    else:
+        threading.Thread(target=camera_loop, args=(args.camera,), daemon=True).start()
+        source = f"camera {args.camera}"
     threading.Thread(target=process_loop, daemon=True).start()
 
-    print("Waiting for phone camera frames. C = calibrate, S = save frame, Q = quit.")
+    print(f"Waiting for {source}. C = calibrate, S = save frame, Q = quit.")
 
     cv2.namedWindow(SETTINGS_WINDOW)
     # Trackbars have no tooltips, so the window shows a short guide instead.

@@ -79,6 +79,17 @@ Keep both the Python server and ngrok running while using the camera.
 - `models/hand_landmarker.task` — MediaPipe hand-tracking model.
 - `requirements.txt` — Python dependencies.
 
+## Using the iPhone over USB (no ngrok)
+
+Install **Camo Camera** (iPhone) and **Camo Studio** (Windows, camo.com), plug in the cable, and open both. Then:
+
+```powershell
+python phone_server.py --list-cameras    # find Camo's index
+python phone_server.py --camera 1        # use that index
+```
+
+The free Camo tier (720p, no watermark) is enough. Without `--camera`, the phone page + ngrok setup above still works.
+
 ## Calibration
 
 The template is black solid boxes or black outlines on white Letter paper, landscape.
