@@ -246,10 +246,10 @@ def process_loop():
 
 
 SETTINGS_HELP = [
-    "Sensitivity (default 50)",
+    "Sens = sensitivity (default 50)",
     "  Raise if lines or keys are missed.",
     "  Lower if shadows or paper texture become regions.",
-    "Min black key (default 15)",
+    "Key = min black key size (default 15)",
     "  Lower for small drawings where black keys",
     "  vanish or merge into white keys.",
     "Changes re-detect ~0.3 s after you stop dragging.",
@@ -285,8 +285,8 @@ if __name__ == "__main__":
     cv2.namedWindow(SETTINGS_WINDOW)
     # Trackbars have no tooltips, so the window shows a short guide instead.
     cv2.imshow(SETTINGS_WINDOW, settings_help_image())
-    cv2.createTrackbar("Sensitivity", SETTINGS_WINDOW, 50, 100, lambda v: None)
-    cv2.createTrackbar("Min black key", SETTINGS_WINDOW, 15, 31, lambda v: None)
+    cv2.createTrackbar("Sens", SETTINGS_WINDOW, 50, 100, lambda v: None)
+    cv2.createTrackbar("Key", SETTINGS_WINDOW, 15, 31, lambda v: None)
     applied = (None, None)    # Settings the trackbars were last set to.
     pending = None            # (settings, time first seen) while debouncing.
 
@@ -323,12 +323,12 @@ if __name__ == "__main__":
                     if (cs["ink_ratio"], cs["line_kernel"]) != applied:
                         applied = (cs["ink_ratio"], cs["line_kernel"])
                         cv2.setTrackbarPos(
-                            "Sensitivity", SETTINGS_WINDOW,
+                            "Sens", SETTINGS_WINDOW,
                             round((cs["ink_ratio"] - 0.5) / 0.4 * 100),
                         )
-                        cv2.setTrackbarPos("Min black key", SETTINGS_WINDOW, cs["line_kernel"])
-            sens = cv2.getTrackbarPos("Sensitivity", SETTINGS_WINDOW)
-            kern = max(3, cv2.getTrackbarPos("Min black key", SETTINGS_WINDOW))
+                        cv2.setTrackbarPos("Key", SETTINGS_WINDOW, cs["line_kernel"])
+            sens = cv2.getTrackbarPos("Sens", SETTINGS_WINDOW)
+            kern = max(3, cv2.getTrackbarPos("Key", SETTINGS_WINDOW))
             want = (0.5 + 0.4 * sens / 100, kern)
             if want == (ink_ratio_setting, line_kernel_setting):
                 pending = None
