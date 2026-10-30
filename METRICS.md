@@ -18,6 +18,7 @@ These are numbers worth keeping for write-ups and résumé bullets. Every entry 
 | 2026-10-29 | One-octave paper piano: keys found and ordered chromatically (C → B, 12 keys) | 12/12 correct when straight, tilted, sideways (rotated 90°) and at 40% scale | Synthetic tests |
 | 2026-10-29 | Hand-drawn pen box on lined paper (first real photo) | 0 → 1 box detected, after outline gap-closing | Measured on a real photo, now a regression test |
 | 2026-10-29 | Hand-drawn 2-white + 1-black key sketch plus a box | 4/4 regions on both saved frames | Measured on real photos |
+| 2026-10-29 | Real 640×480 frames from a higher camera angle with the paper rotated (torn, round-cornered lined paper) | Paper found in 0/2 → 2/2 frames; all 4 regions correct in 2/2 (ruled lines no longer split keys) | Measured on real photos, now regression tests |
 | 2026-10-29 | Lookup cost from fingertip to key | One array read per fingertip (precomputed key map) | By design |
 
 ## Engineering quality
