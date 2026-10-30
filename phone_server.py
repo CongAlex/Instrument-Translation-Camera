@@ -153,10 +153,9 @@ def submit_frame(frame):
 
 def open_camera(index):
     # DirectShow is the Windows backend that lists virtual webcams like Camo.
-    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    return cap
+    # Use the camera's own resolution: asking Camo for 640x480 makes it send
+    # all-black frames.
+    return cv2.VideoCapture(index, cv2.CAP_DSHOW)
 
 
 def list_cameras(max_index=6):
