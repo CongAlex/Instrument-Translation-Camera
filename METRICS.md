@@ -19,13 +19,24 @@ These are numbers worth keeping for write-ups and résumé bullets. Every entry 
 | 2026-10-29 | Hand-drawn pen box on lined paper (first real photo) | 0 → 1 box detected, after outline gap-closing | Measured on a real photo, now a regression test |
 | 2026-10-29 | Hand-drawn 2-white + 1-black key sketch plus a box | 4/4 regions on both saved frames | Measured on real photos |
 | 2026-10-29 | Real 640×480 frames from a higher camera angle with the paper rotated (torn, round-cornered lined paper) | Paper found in 0/2 → 2/2 frames; all 4 regions correct in 2/2 (ruled lines no longer split keys) | Measured on real photos, now regression tests |
+| 2026-10-29 | Small hand-drawn one-octave keyboard (~1 × 3.5 cm, black keys ~2–3 mm) on blank paper | 11/12 keys at the default sensitivity → **12/12, in chromatic order**, with the sensitivity slider raised | Measured on a real photo, now a regression test |
+| 2026-10-29 | Re-tuning detection after calibration | Re-detects ~0.3 s after a slider stops moving, using the saved reference image; no new capture needed | By design |
 | 2026-10-29 | Lookup cost from fingertip to key | One array read per fingertip (precomputed key map) | By design |
+
+## Tap Strap (M0 tooling, strap not yet tested on paper)
+
+| Date | Metric | Result | Source |
+|---|---|---|---|
+| 2026-10-29 | Tap detector and analysis pipeline, checked on synthetic 200 Hz recordings with known taps and 30% crosstalk | Precision 1.00 and recall 1.00 on all 5 fingers; crosstalk measured at 0.30 (matches what was built in); 200 Hz, 0 gaps, batching measured correctly | Synthetic tests |
+| 2026-10-29 | Labelled-data tooling | Guided recording sessions (taps, press-hold-lift, idle) that save ML-ready labelled CSVs | By design |
 
 ## Engineering quality
 
 | Date | Metric | Before | After |
 |---|---|---|---|
 | 2026-10-29 | Automated tests | 0 | 19 (server + calibration), all passing |
+| 2026-10-29 | Automated tests (later the same day) | 19 | 33 (server, calibration, real-photo fixtures, strap decoding, M0 analysis), all passing; the full suite runs in about 6 s |
+| 2026-10-29 | Repos consolidated | Camera and strap code in separate repos | One master repo |
 | 2026-10-29 | Server hardening | No upload limit, CORS open to all sites, thread-unsafe ML calls | 2 MB cap, CORS removed, serialised landmarker with strictly increasing timestamps |
 
 ## Still to measure (fill in later)
