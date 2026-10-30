@@ -1,25 +1,30 @@
 import threading
 import time
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
 import numpy as np
 from flask import Flask, request, send_from_directory
-from flask_cors import CORS
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 from paper_detector import detect_paper
 
+BASE_DIR = Path(__file__).resolve().parent
+
 app = Flask(__name__)
-CORS(app)
+# Frames are small JPEGs; reject anything larger.
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
 latest_frame = None
 latest_mask = None
 frame_lock = threading.Lock()
+landmarker_lock = threading.Lock()
+last_timestamp_ms = 0
 
 # Initialize MediaPipe Hand Landmarker.
-model_path = "models/hand_landmarker.task"
+model_path = str(BASE_DIR / "models" / "hand_landmarker.task")
 
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.HandLandmarkerOptions(
@@ -73,22 +78,22 @@ def draw_hand_landmarks(frame, result):
 
 @app.get("/")
 def home():
-    return send_from_directory(".", "phone_camera.html")
+    return send_from_directory(BASE_DIR, "phone_camera.html")
 
 
 @app.get("/phone_camera.css")
 def camera_css():
-    return send_from_directory(".", "phone_camera.css")
+    return send_from_directory(BASE_DIR, "phone_camera.css")
 
 
 @app.get("/phone_camera.js")
 def camera_js():
-    return send_from_directory(".", "phone_camera.js")
+    return send_from_directory(BASE_DIR, "phone_camera.js")
 
 
 @app.post("/frame")
 def receive_frame():
-    global latest_frame, latest_mask
+    global latest_frame, latest_mask, last_timestamp_ms
 
     image_bytes = np.frombuffer(request.get_data(), dtype=np.uint8)
     frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
@@ -97,7 +102,7 @@ def receive_frame():
         return "Invalid image", 400
 
     # Detect the paper.
-    frame, mask = detect_paper(frame)
+    annotated, mask = detect_paper(frame)
 
     # Convert BGR (OpenCV) to RGB (MediaPipe).
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -106,15 +111,17 @@ def receive_frame():
         data=rgb_frame,
     )
 
-    # VIDEO mode requires monotonically increasing timestamps.
-    timestamp_ms = int(time.monotonic() * 1000)
-    result = hand_landmarker.detect_for_video(mp_image, timestamp_ms)
+    # VIDEO mode needs strictly increasing timestamps and is not thread-safe.
+    with landmarker_lock:
+        timestamp_ms = max(int(time.monotonic() * 1000), last_timestamp_ms + 1)
+        last_timestamp_ms = timestamp_ms
+        result = hand_landmarker.detect_for_video(mp_image, timestamp_ms)
 
     # Draw detected hand landmarks.
-    frame = draw_hand_landmarks(frame, result)
+    annotated = draw_hand_landmarks(annotated, result)
 
     with frame_lock:
-        latest_frame = frame
+        latest_frame = annotated
         latest_mask = mask
 
     return "OK", 200
@@ -149,8 +156,9 @@ if __name__ == "__main__":
                     else None
                 )
 
-            if frame is not None:
-                cv2.imshow("Phone Camera Feed", frame)
+            if frame is None:
+                frame = np.zeros((240, 320, 3), dtype=np.uint8)
+            cv2.imshow("Phone Camera Feed", frame)
 
             if mask is not None:
                 cv2.imshow("Paper Detection Mask", mask)

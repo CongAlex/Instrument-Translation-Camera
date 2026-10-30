@@ -3,6 +3,7 @@ import numpy as np
 
 
 def detect_paper(frame):
+    frame = frame.copy()
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     lower_white = np.array([0, 0, 120])

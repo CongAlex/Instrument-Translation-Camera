@@ -79,6 +79,14 @@ Keep both the Python server and ngrok running while using the camera.
 - `models/hand_landmarker.task` — MediaPipe hand-tracking model.
 - `requirements.txt` — Python dependencies.
 
+## Tests
+
+Run the unit tests from the repo root:
+
+```
+python -m unittest discover -s tests -t .
+```
+
 ## Notes
 
 - Phone camera access requires HTTPS; use the ngrok forwarding URL.
